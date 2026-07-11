@@ -6,8 +6,9 @@ import { motion } from "framer-motion";
 import { Camera, LogOut, Pencil } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import EditProfileModal from "@/components/EditProfileModal";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import { fileToDataUrl } from "@/lib/image";
-import { updateUser, type User } from "@/lib/store";
+import { isVerified, updateUser, type User } from "@/lib/store";
 import { daysAboard } from "@/lib/time";
 
 export default function ProfileCard({
@@ -65,8 +66,9 @@ export default function ProfileCard({
         />
 
         <Link href={`/u/${me.handle}`} className="group/name mt-3.5">
-          <h2 className="font-display text-lg font-bold text-white transition-colors group-hover/name:text-indigo-300">
+          <h2 className="flex items-center justify-center gap-1.5 font-display text-lg font-bold text-white transition-colors group-hover/name:text-indigo-300">
             {me.name}
+            {isVerified(me) && <VerifiedBadge size={17} />}
           </h2>
           <p className="text-sm text-indigo-300/80">@{me.handle}</p>
         </Link>

@@ -16,10 +16,13 @@ import {
   getPosts,
   getUserByHandle,
   getUsers,
+  isVerified,
   toggleLike,
+  updatePost,
   type Post,
   type User,
 } from "@/lib/store";
+import VerifiedBadge from "@/components/VerifiedBadge";
 import { daysAboard, monthYearGenitive } from "@/lib/time";
 import { pluralRu } from "@/lib/tags";
 
@@ -135,6 +138,7 @@ export default function ProfilePage() {
                   <h1 className="font-display text-2xl font-bold text-white">
                     {profile.name}
                   </h1>
+                  {isVerified(profile) && <VerifiedBadge size={20} />}
                   {isMe && (
                     <span className="rounded-full bg-indigo-500/25 px-2.5 py-0.5 text-xs font-medium text-indigo-200">
                       это вы
@@ -193,19 +197,24 @@ export default function ProfilePage() {
           {/* posts */}
           <div className="mt-6 space-y-4">
             <AnimatePresence initial={false}>
-              {userPosts.map((post) => (
+              {userPosts.map((post, i) => (
                 <PostCard
                   key={post.id}
                   post={post}
                   author={profile}
                   me={me}
                   getUser={getUser}
+                  swayIndex={i}
                   onLike={(id) => {
                     toggleLike(id, me.id);
                     refresh();
                   }}
                   onDelete={(id) => {
                     deletePost(id);
+                    refresh();
+                  }}
+                  onEdit={(postId, text, image) => {
+                    updatePost(postId, text, image);
                     refresh();
                   }}
                   onComment={(postId, text) => {

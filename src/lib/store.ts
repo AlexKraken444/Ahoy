@@ -27,6 +27,7 @@ export type Post = {
   likes: string[]; // user ids
   comments: Comment[];
   createdAt: number;
+  editedAt?: number;
 };
 
 const USERS_KEY = "ahoy:users";
@@ -118,6 +119,13 @@ export function getUserByHandle(handle: string): User | null {
   return getUsers().find((u) => u.handle === clean) ?? null;
 }
 
+/** Handles that get the blue check. Add yours here. */
+const VERIFIED_HANDLES = ["kuraken", "captain"];
+
+export function isVerified(user: User | null): boolean {
+  return !!user && VERIFIED_HANDLES.includes(user.handle);
+}
+
 type AuthResult = { ok: true; user: User } | { ok: false; error: string };
 
 export async function register(
@@ -199,6 +207,17 @@ export function addPost(userId: string, text: string, image: string | null): Pos
   };
   write(POSTS_KEY, [post, ...readPosts()]);
   return post;
+}
+
+export function updatePost(id: string, text: string, image: string | null) {
+  write(
+    POSTS_KEY,
+    readPosts().map((p) =>
+      p.id === id
+        ? { ...p, text: text.trim(), image, editedAt: Date.now() }
+        : p
+    )
+  );
 }
 
 export function deletePost(id: string) {

@@ -20,6 +20,7 @@ import {
   getUsers,
   logout,
   toggleLike,
+  updatePost,
   type Post,
   type User,
 } from "@/lib/store";
@@ -136,19 +137,24 @@ export default function FeedPage() {
 
           <div className="mt-5 space-y-4">
             <AnimatePresence initial={false}>
-              {posts.map((post) => (
+              {posts.map((post, i) => (
                 <PostCard
                   key={post.id}
                   post={post}
                   author={authorOf(post.userId)}
                   me={me}
                   getUser={authorOf}
+                  swayIndex={i}
                   onLike={(id) => {
                     toggleLike(id, me.id);
                     refresh();
                   }}
                   onDelete={(id) => {
                     deletePost(id);
+                    refresh();
+                  }}
+                  onEdit={(postId, text, image) => {
+                    updatePost(postId, text, image);
                     refresh();
                   }}
                   onComment={(postId, text) => {

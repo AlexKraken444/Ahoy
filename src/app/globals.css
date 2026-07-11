@@ -60,6 +60,32 @@ body {
   }
 }
 
+/* ---- posts gently bobbing on the waves ---- */
+.sway {
+  animation: sway var(--sway-dur, 7s) ease-in-out infinite;
+  animation-delay: var(--sway-delay, 0s);
+  will-change: transform;
+}
+
+@keyframes sway {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  25% {
+    transform: translateY(-3.5px) rotate(0.3deg);
+  }
+  60% {
+    transform: translateY(2.5px) rotate(-0.3deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sway {
+    animation: none;
+  }
+}
+
 /* ---- glassmorphism & inputs (components layer so utilities can override) ---- */
 @layer components {
   .glass {
