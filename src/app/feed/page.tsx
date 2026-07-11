@@ -10,20 +10,8 @@ import Composer from "@/components/Composer";
 import Logo from "@/components/Logo";
 import PostCard from "@/components/PostCard";
 import ProfileCard from "@/components/ProfileCard";
-import {
-  addComment,
-  addPost,
-  currentUser,
-  deleteComment,
-  deletePost,
-  getPosts,
-  getUsers,
-  logout,
-  toggleLike,
-  updatePost,
-  type Post,
-  type User,
-} from "@/lib/store";
+import * as api from "@/lib/api";
+import type { Post, User } from "@/lib/types";
 import { computeTrends, pluralRu } from "@/lib/tags";
 
 export default function FeedPage() {
@@ -32,27 +20,35 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<User[]>([]);
 
-  const refresh = useCallback(() => {
-    setMe(currentUser());
-    setPosts(getPosts());
-    setUsers(getUsers());
-  }, []);
+  const refresh = useCallback(async () => {
+    try {
+      const data = await api.feed();
+      if (!data.me.onboarded) {
+        router.replace("/onboarding");
+        return;
+      }
+      setMe(data.me);
+      setPosts(data.posts);
+      setUsers(data.users);
+    } catch (e) {
+      if (e instanceof api.ApiError && e.status === 401) {
+        router.replace("/");
+      }
+    }
+  }, [router]);
 
   useEffect(() => {
-    const u = currentUser();
-    if (!u) {
+    if (!api.hasToken()) {
       router.replace("/");
       return;
     }
-    if (!u.onboarded) {
-      router.replace("/onboarding");
-      return;
-    }
     refresh();
+    const timer = setInterval(refresh, 15000);
+    return () => clearInterval(timer);
   }, [router, refresh]);
 
-  function handleLogout() {
-    logout();
+  async function handleLogout() {
+    await api.logout();
     router.push("/");
   }
 
@@ -114,8 +110,8 @@ export default function FeedPage() {
 
           <Composer
             me={me}
-            onPost={(text, image) => {
-              addPost(me.id, text, image);
+            onPost={async (text, image) => {
+              await api.addPost(text, image);
               refresh();
             }}
           />
@@ -145,24 +141,24 @@ export default function FeedPage() {
                   me={me}
                   getUser={authorOf}
                   swayIndex={i}
-                  onLike={(id) => {
-                    toggleLike(id, me.id);
+                  onLike={async (id) => {
+                    await api.toggleLike(id);
                     refresh();
                   }}
-                  onDelete={(id) => {
-                    deletePost(id);
+                  onDelete={async (id) => {
+                    await api.deletePost(id);
                     refresh();
                   }}
-                  onEdit={(postId, text, image) => {
-                    updatePost(postId, text, image);
+                  onEdit={async (postId, text, image) => {
+                    await api.updatePost(postId, text, image);
                     refresh();
                   }}
-                  onComment={(postId, text) => {
-                    addComment(postId, me.id, text);
+                  onComment={async (postId, text) => {
+                    await api.addComment(postId, text);
                     refresh();
                   }}
-                  onDeleteComment={(postId, commentId) => {
-                    deleteComment(postId, commentId);
+                  onDeleteComment={async (postId, commentId) => {
+                    await api.deleteComment(postId, commentId);
                     refresh();
                   }}
                 />

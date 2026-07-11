@@ -6,7 +6,8 @@ import { motion } from "framer-motion";
 import { Camera, Sailboat } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import Logo from "@/components/Logo";
-import { currentUser, sanitizeHandle, updateUser, type User } from "@/lib/store";
+import { ApiError, me, updateProfile } from "@/lib/api";
+import type { User } from "@/lib/types";
 import { fileToDataUrl } from "@/lib/image";
 
 const BIO_LIMIT = 160;
@@ -17,20 +18,23 @@ export default function OnboardingPage() {
   const [avatar, setAvatar] = useState<string | null>(null);
   const [handle, setHandle] = useState("");
   const [bio, setBio] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const u = currentUser();
-    if (!u) {
-      router.replace("/");
-      return;
-    }
-    if (u.onboarded) {
-      router.replace("/feed");
-      return;
-    }
-    setUser(u);
-    setHandle(u.handle);
+    me().then((u) => {
+      if (!u) {
+        router.replace("/");
+        return;
+      }
+      if (u.onboarded) {
+        router.replace("/feed");
+        return;
+      }
+      setUser(u);
+      setHandle(u.handle);
+    });
   }, [router]);
 
   async function pickAvatar(e: React.ChangeEvent<HTMLInputElement>) {
@@ -43,17 +47,22 @@ export default function OnboardingPage() {
     }
   }
 
-  function finish() {
-    if (!user) return;
-    const cleanHandle = sanitizeHandle(handle) || user.handle;
-    updateUser({
-      ...user,
-      avatar,
-      handle: cleanHandle,
-      bio: bio.trim(),
-      onboarded: true,
-    });
-    router.push("/feed");
+  async function finish() {
+    if (!user || saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      await updateProfile({
+        avatar,
+        handle: handle.trim() || user.handle,
+        bio,
+        onboarded: true,
+      });
+      router.push("/feed");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Нет связи с сервером");
+      setSaving(false);
+    }
   }
 
   if (!user) return null;
@@ -157,15 +166,26 @@ export default function OnboardingPage() {
             </div>
           </motion.div>
 
+          {error && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-4 rounded-xl border border-red-400/25 bg-red-500/10 px-4 py-2.5 text-sm text-red-300"
+            >
+              {error}
+            </motion.p>
+          )}
+
           <motion.button
             variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0 } }}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
             onClick={finish}
-            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-600 py-3.5 font-semibold text-white shadow-lg shadow-indigo-900/50"
+            disabled={saving}
+            className="mt-4 flex w-full items-center justify-center gap-2.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-600 py-3.5 font-semibold text-white shadow-lg shadow-indigo-900/50 transition-opacity disabled:opacity-60"
           >
             <Sailboat size={19} />
-            Поднять паруса
+            {saving ? "Отдаём швартовы…" : "Поднять паруса"}
           </motion.button>
 
           <motion.p

@@ -1,4 +1,4 @@
-import type { Post } from "@/lib/store";
+import type { Post } from "@/lib/types";
 
 export const TAG_RE = /#[\p{L}\p{N}_]+/gu;
 

@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ImagePlus, Send, X } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import { fileToDataUrl } from "@/lib/image";
-import type { User } from "@/lib/store";
+import type { User } from "@/lib/types";
 
 const LIMIT = 280;
 

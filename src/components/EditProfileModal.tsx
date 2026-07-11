@@ -5,7 +5,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Camera, Check, X } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import { fileToDataUrl } from "@/lib/image";
-import { getUsers, sanitizeHandle, updateUser, type User } from "@/lib/store";
+import { ApiError, updateProfile } from "@/lib/api";
+import type { User } from "@/lib/types";
 
 export default function EditProfileModal({
   me,
@@ -46,32 +47,21 @@ export default function EditProfileModal({
     }
   }
 
-  function save() {
-    const cleanName = name.trim();
-    const cleanHandle = sanitizeHandle(handle);
-    if (cleanName.length < 2) {
-      setError("Имя должно быть не короче 2 символов");
-      return;
-    }
-    if (cleanHandle.length < 3) {
-      setError("Ник должен быть не короче 3 символов (латиница, цифры, _)");
-      return;
-    }
-    if (getUsers().some((u) => u.id !== me.id && u.handle === cleanHandle)) {
-      setError("Этот ник уже занят другим членом экипажа");
-      return;
-    }
-    const updated: User = {
-      ...me,
-      name: cleanName,
-      handle: cleanHandle,
-      bio: bio.trim(),
-      avatar,
-    };
-    updateUser(updated);
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (saving) return;
+    setSaving(true);
     setError("");
-    onSaved(updated);
-    onClose();
+    try {
+      const updated = await updateProfile({ name, handle, bio, avatar });
+      onSaved(updated);
+      onClose();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Нет связи с сервером");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -195,10 +185,11 @@ export default function EditProfileModal({
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.97 }}
               onClick={save}
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-600 py-3 font-semibold text-white shadow-lg shadow-indigo-900/50"
+              disabled={saving}
+              className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-indigo-500 to-violet-600 py-3 font-semibold text-white shadow-lg shadow-indigo-900/50 transition-opacity disabled:opacity-60"
             >
               <Check size={17} />
-              Сохранить
+              {saving ? "Сохраняем…" : "Сохранить"}
             </motion.button>
           </motion.div>
         </motion.div>

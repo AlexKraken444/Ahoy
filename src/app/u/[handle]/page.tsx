@@ -8,20 +8,8 @@ import { ArrowLeft, CalendarDays, Pencil } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import EditProfileModal from "@/components/EditProfileModal";
 import PostCard from "@/components/PostCard";
-import {
-  addComment,
-  currentUser,
-  deleteComment,
-  deletePost,
-  getPosts,
-  getUserByHandle,
-  getUsers,
-  isVerified,
-  toggleLike,
-  updatePost,
-  type Post,
-  type User,
-} from "@/lib/store";
+import * as api from "@/lib/api";
+import { isVerified, type Post, type User } from "@/lib/types";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { daysAboard, monthYearGenitive } from "@/lib/time";
 import { pluralRu } from "@/lib/tags";
@@ -38,25 +26,35 @@ export default function ProfilePage() {
 
   const handleParam = decodeURIComponent(params.handle ?? "");
 
-  const refresh = useCallback(() => {
-    setMe(currentUser());
-    setUsers(getUsers());
-    setPosts(getPosts());
-    setProfile(getUserByHandle(handleParam));
-    setReady(true);
-  }, [handleParam]);
+  const refresh = useCallback(async () => {
+    try {
+      const data = await api.feed();
+      if (!data.me.onboarded) {
+        router.replace("/onboarding");
+        return;
+      }
+      setMe(data.me);
+      setUsers(data.users);
+      setPosts(data.posts);
+      setProfile(
+        data.users.find((u) => u.handle === handleParam.toLowerCase()) ?? null
+      );
+      setReady(true);
+    } catch (e) {
+      if (e instanceof api.ApiError && e.status === 401) {
+        router.replace("/");
+      }
+    }
+  }, [router, handleParam]);
 
   useEffect(() => {
-    const u = currentUser();
-    if (!u) {
+    if (!api.hasToken()) {
       router.replace("/");
       return;
     }
-    if (!u.onboarded) {
-      router.replace("/onboarding");
-      return;
-    }
     refresh();
+    const timer = setInterval(refresh, 15000);
+    return () => clearInterval(timer);
   }, [router, refresh]);
 
   if (!ready || !me) return null;
@@ -205,24 +203,24 @@ export default function ProfilePage() {
                   me={me}
                   getUser={getUser}
                   swayIndex={i}
-                  onLike={(id) => {
-                    toggleLike(id, me.id);
+                  onLike={async (id) => {
+                    await api.toggleLike(id);
                     refresh();
                   }}
-                  onDelete={(id) => {
-                    deletePost(id);
+                  onDelete={async (id) => {
+                    await api.deletePost(id);
                     refresh();
                   }}
-                  onEdit={(postId, text, image) => {
-                    updatePost(postId, text, image);
+                  onEdit={async (postId, text, image) => {
+                    await api.updatePost(postId, text, image);
                     refresh();
                   }}
-                  onComment={(postId, text) => {
-                    addComment(postId, me.id, text);
+                  onComment={async (postId, text) => {
+                    await api.addComment(postId, text);
                     refresh();
                   }}
-                  onDeleteComment={(postId, commentId) => {
-                    deleteComment(postId, commentId);
+                  onDeleteComment={async (postId, commentId) => {
+                    await api.deleteComment(postId, commentId);
                     refresh();
                   }}
                 />

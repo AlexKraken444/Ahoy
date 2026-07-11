@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Compass, Loader2, Lock, Mail, Sailboat, UserRound, Waves } from "lucide-react";
 import Logo from "@/components/Logo";
-import { currentUser, login, register } from "@/lib/store";
+import { ApiError, hasToken, login, me, register } from "@/lib/api";
 
 type Mode = "login" | "register";
 
@@ -26,12 +26,17 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const user = currentUser();
-    if (user) {
-      router.replace(user.onboarded ? "/feed" : "/onboarding");
-    } else {
+    if (!hasToken()) {
       setReady(true);
+      return;
     }
+    me().then((user) => {
+      if (user) {
+        router.replace(user.onboarded ? "/feed" : "/onboarding");
+      } else {
+        setReady(true);
+      }
+    });
   }, [router]);
 
   async function submit(e: React.FormEvent) {
@@ -52,17 +57,16 @@ export default function AuthPage() {
     }
 
     setLoading(true);
-    const result =
-      mode === "register"
-        ? await register(name, email, password)
-        : await login(email, password);
-    setLoading(false);
-
-    if (!result.ok) {
-      setError(result.error);
-      return;
+    try {
+      const user =
+        mode === "register"
+          ? await register(name, email, password)
+          : await login(email, password);
+      router.push(user.onboarded ? "/feed" : "/onboarding");
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Нет связи с сервером");
+      setLoading(false);
     }
-    router.push(result.user.onboarded ? "/feed" : "/onboarding");
   }
 
   if (!ready) return null;

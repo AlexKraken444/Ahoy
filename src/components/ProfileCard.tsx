@@ -8,7 +8,8 @@ import Avatar from "@/components/Avatar";
 import EditProfileModal from "@/components/EditProfileModal";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { fileToDataUrl } from "@/lib/image";
-import { isVerified, updateUser, type User } from "@/lib/store";
+import { updateProfile } from "@/lib/api";
+import { isVerified, type User } from "@/lib/types";
 import { daysAboard } from "@/lib/time";
 
 export default function ProfileCard({
@@ -30,10 +31,10 @@ export default function ProfileCard({
     e.target.value = "";
     if (!file) return;
     try {
-      updateUser({ ...me, avatar: await fileToDataUrl(file, 384) });
+      await updateProfile({ avatar: await fileToDataUrl(file, 384) });
       onChange();
     } catch {
-      /* ignore unreadable files */
+      /* ignore unreadable files / network hiccups */
     }
   }
 

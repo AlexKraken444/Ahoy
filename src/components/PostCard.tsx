@@ -19,7 +19,7 @@ import VerifiedBadge from "@/components/VerifiedBadge";
 import { fileToDataUrl } from "@/lib/image";
 import { timeAgo } from "@/lib/time";
 import { TAG_RE } from "@/lib/tags";
-import { isVerified, type Post, type User } from "@/lib/store";
+import { isVerified, type Post, type User } from "@/lib/types";
 
 const LIMIT = 280;
 
