@@ -20,14 +20,7 @@ import {
   type Post,
   type User,
 } from "@/lib/store";
-
-const TRENDS = [
-  { tag: "#Ahoy", posts: "12,4 тыс." },
-  { tag: "#МореЗовёт", posts: "8,1 тыс." },
-  { tag: "#ПопутныйВетер", posts: "5,7 тыс." },
-  { tag: "#ШтормовоеПредупреждение", posts: "3,2 тыс." },
-  { tag: "#КаютаДняБезКота", posts: "1,9 тыс." },
-];
+import { computeTrends, pluralRu } from "@/lib/tags";
 
 export default function FeedPage() {
   const router = useRouter();
@@ -63,6 +56,7 @@ export default function FeedPage() {
 
   const authorOf = (id: string) => users.find((u) => u.id === id) ?? null;
   const myPostCount = posts.filter((p) => p.userId === me.id).length;
+  const trends = computeTrends(posts).slice(0, 5);
 
   return (
     <div className="mx-auto min-h-screen max-w-7xl px-4 pb-16">
@@ -165,21 +159,34 @@ export default function FeedPage() {
                 <Flame size={17} className="text-amber-400" />
                 Сейчас в тренде
               </h2>
-              <ul>
-                {TRENDS.map((t, i) => (
-                  <motion.li
-                    key={t.tag}
-                    initial={{ opacity: 0, x: 16 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.3 + i * 0.08 }}
-                  >
-                    <button className="block w-full rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5">
-                      <div className="text-sm font-semibold text-indigo-200">{t.tag}</div>
-                      <div className="text-xs text-indigo-100/40">{t.posts} постов</div>
-                    </button>
-                  </motion.li>
-                ))}
-              </ul>
+              {trends.length > 0 ? (
+                <ul>
+                  <AnimatePresence initial={false}>
+                    {trends.map((t, i) => (
+                      <motion.li
+                        key={t.tag}
+                        layout
+                        initial={{ opacity: 0, x: 16 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 16 }}
+                        transition={{ delay: i * 0.05 }}
+                        className="rounded-xl px-3 py-2.5 transition-colors hover:bg-white/5"
+                      >
+                        <div className="text-sm font-semibold text-indigo-200">{t.tag}</div>
+                        <div className="text-xs text-indigo-100/40">
+                          {t.count} {pluralRu(t.count, ["пост", "поста", "постов"])}
+                        </div>
+                      </motion.li>
+                    ))}
+                  </AnimatePresence>
+                </ul>
+              ) : (
+                <p className="px-1 text-sm leading-relaxed text-indigo-100/45">
+                  Пока тихо — хэштеги ещё никто не использовал. Добавьте{" "}
+                  <span className="font-semibold text-indigo-300">#хэштег</span> в пост
+                  и задайте первый тренд!
+                </p>
+              )}
             </motion.section>
 
             <motion.section

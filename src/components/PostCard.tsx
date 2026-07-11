@@ -5,7 +5,25 @@ import { AnimatePresence, motion } from "framer-motion";
 import { Anchor, MessageCircle, Share2, Trash2 } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import { timeAgo } from "@/lib/time";
+import { TAG_RE } from "@/lib/tags";
 import type { Post, User } from "@/lib/store";
+
+function renderText(text: string) {
+  const tags = text.match(TAG_RE) ?? [];
+  const parts = text.split(TAG_RE);
+  const nodes: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    nodes.push(part);
+    if (i < tags.length) {
+      nodes.push(
+        <span key={i} className="font-medium text-indigo-300">
+          {tags[i]}
+        </span>
+      );
+    }
+  });
+  return nodes;
+}
 
 export default function PostCard({
   post,
@@ -57,7 +75,7 @@ export default function PostCard({
           </div>
 
           <p className="mt-1.5 whitespace-pre-wrap break-words leading-relaxed text-indigo-50/90">
-            {post.text}
+            {renderText(post.text)}
           </p>
 
           {post.image && (
