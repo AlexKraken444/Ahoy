@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { Flame, LogOut, Waves } from "lucide-react";
@@ -10,8 +11,10 @@ import Logo from "@/components/Logo";
 import PostCard from "@/components/PostCard";
 import ProfileCard from "@/components/ProfileCard";
 import {
+  addComment,
   addPost,
   currentUser,
+  deleteComment,
   deletePost,
   getPosts,
   getUsers,
@@ -64,7 +67,9 @@ export default function FeedPage() {
       <header className="glass sticky top-3 z-20 mb-6 mt-3 flex items-center justify-between rounded-2xl px-4 py-2.5 lg:hidden">
         <Logo />
         <div className="flex items-center gap-2">
-          <Avatar name={me.name} avatar={me.avatar} size={34} />
+          <Link href={`/u/${me.handle}`} aria-label="Мой профиль">
+            <Avatar name={me.name} avatar={me.avatar} size={34} />
+          </Link>
           <button
             onClick={handleLogout}
             className="rounded-xl p-2 text-indigo-100/50 transition-colors hover:bg-red-500/10 hover:text-red-300"
@@ -114,6 +119,21 @@ export default function FeedPage() {
             }}
           />
 
+          {/* trends as chips on screens without the right column */}
+          {trends.length > 0 && (
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1 xl:hidden">
+              {trends.map((t) => (
+                <span
+                  key={t.tag}
+                  className="glass-soft flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs"
+                >
+                  <span className="font-semibold text-indigo-300">{t.tag}</span>
+                  <span className="tabular-nums text-indigo-100/45">{t.count}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="mt-5 space-y-4">
             <AnimatePresence initial={false}>
               {posts.map((post) => (
@@ -122,12 +142,21 @@ export default function FeedPage() {
                   post={post}
                   author={authorOf(post.userId)}
                   me={me}
+                  getUser={authorOf}
                   onLike={(id) => {
                     toggleLike(id, me.id);
                     refresh();
                   }}
                   onDelete={(id) => {
                     deletePost(id);
+                    refresh();
+                  }}
+                  onComment={(postId, text) => {
+                    addComment(postId, me.id, text);
+                    refresh();
+                  }}
+                  onDeleteComment={(postId, commentId) => {
+                    deleteComment(postId, commentId);
                     refresh();
                   }}
                 />

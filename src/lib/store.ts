@@ -12,12 +12,20 @@ export type User = {
   onboarded: boolean;
 };
 
+export type Comment = {
+  id: string;
+  userId: string;
+  text: string;
+  createdAt: number;
+};
+
 export type Post = {
   id: string;
   userId: string;
   text: string;
   image: string | null; // data URL
   likes: string[]; // user ids
+  comments: Comment[];
   createdAt: number;
 };
 
@@ -84,16 +92,30 @@ const TRANSLIT: Record<string, string> = {
   я: "ya",
 };
 
-export function makeHandle(name: string): string {
-  const base = name
+export function sanitizeHandle(raw: string): string {
+  return raw
+    .trim()
     .toLowerCase()
-    .split("")
-    .map((ch) => TRANSLIT[ch] ?? ch)
-    .join("")
-    .replace(/[^a-z0-9_]/g, "");
+    .replace(/[^a-z0-9_]/g, "")
+    .slice(0, 24);
+}
+
+export function makeHandle(name: string): string {
+  const base = sanitizeHandle(
+    name
+      .toLowerCase()
+      .split("")
+      .map((ch) => TRANSLIT[ch] ?? ch)
+      .join("")
+  );
   const handle = base || "sailor";
   const taken = read<User[]>(USERS_KEY, []).some((u) => u.handle === handle);
   return taken ? `${handle}${Math.floor(100 + Math.random() * 900)}` : handle;
+}
+
+export function getUserByHandle(handle: string): User | null {
+  const clean = handle.toLowerCase();
+  return getUsers().find((u) => u.handle === clean) ?? null;
 }
 
 type AuthResult = { ok: true; user: User } | { ok: false; error: string };
@@ -151,9 +173,18 @@ export function currentUser(): User | null {
 
 /* ------------------------------ posts ------------------------------ */
 
+/** Reads posts and backfills fields added after early versions. */
+function readPosts(): Post[] {
+  return read<Post[]>(POSTS_KEY, []).map((p) => ({
+    ...p,
+    likes: p.likes ?? [],
+    comments: p.comments ?? [],
+  }));
+}
+
 export function getPosts(): Post[] {
   seed();
-  return read<Post[]>(POSTS_KEY, []).sort((a, b) => b.createdAt - a.createdAt);
+  return readPosts().sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export function addPost(userId: string, text: string, image: string | null): Post {
@@ -163,23 +194,24 @@ export function addPost(userId: string, text: string, image: string | null): Pos
     text: text.trim(),
     image,
     likes: [],
+    comments: [],
     createdAt: Date.now(),
   };
-  write(POSTS_KEY, [post, ...read<Post[]>(POSTS_KEY, [])]);
+  write(POSTS_KEY, [post, ...readPosts()]);
   return post;
 }
 
 export function deletePost(id: string) {
   write(
     POSTS_KEY,
-    read<Post[]>(POSTS_KEY, []).filter((p) => p.id !== id)
+    readPosts().filter((p) => p.id !== id)
   );
 }
 
 export function toggleLike(postId: string, userId: string) {
   write(
     POSTS_KEY,
-    read<Post[]>(POSTS_KEY, []).map((p) => {
+    readPosts().map((p) => {
       if (p.id !== postId) return p;
       const liked = p.likes.includes(userId);
       return {
@@ -187,6 +219,34 @@ export function toggleLike(postId: string, userId: string) {
         likes: liked ? p.likes.filter((l) => l !== userId) : [...p.likes, userId],
       };
     })
+  );
+}
+
+export function addComment(postId: string, userId: string, text: string) {
+  write(
+    POSTS_KEY,
+    readPosts().map((p) =>
+      p.id === postId
+        ? {
+            ...p,
+            comments: [
+              ...p.comments,
+              { id: uid(), userId, text: text.trim(), createdAt: Date.now() },
+            ],
+          }
+        : p
+    )
+  );
+}
+
+export function deleteComment(postId: string, commentId: string) {
+  write(
+    POSTS_KEY,
+    readPosts().map((p) =>
+      p.id === postId
+        ? { ...p, comments: p.comments.filter((c) => c.id !== commentId) }
+        : p
+    )
   );
 }
 
@@ -222,6 +282,7 @@ function seed() {
         text: "Совет дня: лучший способ начать утро — крепкий кофе и чистая лента. Публикуйте, ставьте якоря на понравившееся и держите курс. 🌊",
         image: null,
         likes: [],
+        comments: [],
         createdAt: Date.now() - 1000 * 60 * 60 * 5,
       },
       {
@@ -230,6 +291,7 @@ function seed() {
         text: "Добро пожаловать на борт Ahoy! ⚓\n\nЗдесь делятся мыслями, находками и ловят попутный ветер. Напишите свой первый пост — море ждёт!",
         image: null,
         likes: [],
+        comments: [],
         createdAt: Date.now() - 1000 * 60 * 60 * 26,
       },
     ] satisfies Post[]);

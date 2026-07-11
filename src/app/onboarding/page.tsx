@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { Camera, Sailboat } from "lucide-react";
 import Avatar from "@/components/Avatar";
 import Logo from "@/components/Logo";
-import { currentUser, updateUser, type User } from "@/lib/store";
+import { currentUser, sanitizeHandle, updateUser, type User } from "@/lib/store";
 import { fileToDataUrl } from "@/lib/image";
 
 const BIO_LIMIT = 160;
@@ -45,8 +45,7 @@ export default function OnboardingPage() {
 
   function finish() {
     if (!user) return;
-    const cleanHandle =
-      handle.trim().toLowerCase().replace(/[^a-z0-9_]/g, "") || user.handle;
+    const cleanHandle = sanitizeHandle(handle) || user.handle;
     updateUser({
       ...user,
       avatar,
