@@ -45,18 +45,26 @@ npm run dev
 ## Деплой на Vercel (с общей базой)
 
 Чтобы посты и лайки видели все пользователи с разных устройств, подключите
-бесплатную базу Upstash Redis:
+бесплатную базу Upstash Redis (256 МБ и 500 тыс. команд в месяц — карта не нужна).
 
-1. В [Vercel Dashboard](https://vercel.com/dashboard) откройте проект →
-   вкладка **Storage** → **Create Database** → **Upstash** (Redis, есть
-   бесплатный тариф).
-2. Нажмите **Connect to Project** — Vercel сам добавит переменные окружения
-   (`KV_REST_API_URL` / `KV_REST_API_TOKEN` или
-   `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — поддерживаются оба
-   варианта).
-3. Сделайте **Redeploy** проекта.
+**Способ 1 — напрямую через Upstash (рекомендуется, без карты):**
 
-Готово — теперь база общая для всех посетителей сайта.
+1. Зарегистрируйтесь на [console.upstash.com](https://console.upstash.com)
+   (вход через GitHub или Google, бесплатно).
+2. **Create Database** → тип Redis, тариф **Free**, регион — ближайший к
+   региону функций Vercel (по умолчанию `us-east-1` / N. Virginia).
+3. На странице базы найдите раздел **REST API** и скопируйте значения
+   `UPSTASH_REDIS_REST_URL` и `UPSTASH_REDIS_REST_TOKEN`.
+4. В Vercel: проект → **Settings** → **Environment Variables** → добавьте обе
+   переменные (для всех окружений) → **Save**.
+5. **Deployments** → меню «⋯» у последнего деплоя → **Redeploy**.
+
+**Способ 2 — через Vercel Marketplace:** Storage → Create Database → Upstash →
+Upstash for Redis (Free) → Connect to Project → Redeploy. Переменные добавятся
+сами (`KV_REST_API_URL` / `KV_REST_API_TOKEN` — тоже поддерживаются).
+
+Готово — теперь база общая для всех посетителей сайта, а жёлтый баннер
+в ленте исчезнет.
 
 > ⚠️ Без подключённой базы на Vercel данные живут в памяти serverless-функции
 > и пропадают между запросами — база обязательна для продакшена.

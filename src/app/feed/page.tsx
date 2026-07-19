@@ -45,8 +45,18 @@ export default function FeedPage() {
       return;
     }
     refresh();
-    const timer = setInterval(refresh, 15000);
-    return () => clearInterval(timer);
+    // не дёргаем сервер, пока вкладка в фоне — бережём лимит бесплатной базы
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") refresh();
+    }, 15000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [router, refresh]);
 
   async function handleLogout() {
