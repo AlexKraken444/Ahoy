@@ -199,6 +199,63 @@ export async function userFromRequest(req: Request): Promise<DbUser | null> {
   return getUserById(userId);
 }
 
+/** Полное удаление пользователя: аккаунт, его посты, лайки,
+    комментарии на чужих постах и все сессии. */
+export async function purgeUser(userId: string): Promise<{
+  posts: number;
+  likes: number;
+  comments: number;
+  sessions: number;
+}> {
+  const posts = await getAllPosts();
+  let removedPosts = 0;
+  let strippedLikes = 0;
+  let strippedComments = 0;
+
+  for (const p of posts) {
+    if (p.userId === userId) {
+      await deletePostDb(p.id);
+      removedPosts++;
+      continue;
+    }
+    const likes = p.likes.filter((l) => l !== userId);
+    const comments = p.comments.filter((c) => c.userId !== userId);
+    if (likes.length !== p.likes.length || comments.length !== p.comments.length) {
+      strippedLikes += p.likes.length - likes.length;
+      strippedComments += p.comments.length - comments.length;
+      await savePost({ ...p, likes, comments });
+    }
+  }
+
+  let sessions = 0;
+  if (redis) {
+    const all =
+      (await redis.hgetall<Record<string, string>>(SESSIONS)) ?? {};
+    const tokens = Object.entries(all)
+      .filter(([, uid]) => uid === userId)
+      .map(([token]) => token);
+    if (tokens.length > 0) {
+      await redis.hdel(SESSIONS, ...tokens);
+      sessions = tokens.length;
+    }
+  } else {
+    for (const [token, uid] of [...mem.sessions]) {
+      if (uid === userId) {
+        mem.sessions.delete(token);
+        sessions++;
+      }
+    }
+  }
+
+  if (redis) {
+    await Promise.all([redis.srem(USER_SET, userId), redis.del(userKey(userId))]);
+  } else {
+    mem.users.delete(userId);
+  }
+
+  return { posts: removedPosts, likes: strippedLikes, comments: strippedComments, sessions };
+}
+
 /* ------------------------------ handles ------------------------------ */
 
 const TRANSLIT: Record<string, string> = {
