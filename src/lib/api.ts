@@ -85,13 +85,22 @@ export function hasToken(): boolean {
   return getToken() !== null;
 }
 
+/**
+ * Returns the current user, or null when the session is truly invalid (401).
+ * Network/server hiccups are rethrown — the caller must NOT treat them
+ * as "logged out".
+ */
 export async function me(): Promise<User | null> {
   if (!getToken()) return null;
   try {
     const { user } = await call<{ user: User }>("/me");
     return user;
-  } catch {
-    return null;
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      clearToken();
+      return null;
+    }
+    throw e;
   }
 }
 

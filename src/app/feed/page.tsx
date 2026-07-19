@@ -19,6 +19,7 @@ export default function FeedPage() {
   const [me, setMe] = useState<User | null>(null);
   const [posts, setPosts] = useState<Post[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [persistent, setPersistent] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
@@ -30,6 +31,7 @@ export default function FeedPage() {
       setMe(data.me);
       setPosts(data.posts);
       setUsers(data.users);
+      setPersistent(data.persistent);
     } catch (e) {
       if (e instanceof api.ApiError && e.status === 401) {
         router.replace("/");
@@ -52,7 +54,26 @@ export default function FeedPage() {
     router.push("/");
   }
 
-  if (!me) return null;
+  if (!me) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="glass flex items-center gap-3 rounded-3xl px-8 py-5 text-indigo-100/70"
+        >
+          <motion.span
+            animate={{ rotate: [0, -14, 10, 0] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: "easeInOut" }}
+            className="text-indigo-300"
+          >
+            <Waves size={20} />
+          </motion.span>
+          Поднимаем паруса…
+        </motion.div>
+      </div>
+    );
+  }
 
   const authorOf = (id: string) => users.find((u) => u.id === id) ?? null;
   const myPostCount = posts.filter((p) => p.userId === me.id).length;
@@ -107,6 +128,19 @@ export default function FeedPage() {
             <Waves size={22} className="text-indigo-400" />
             Лента
           </motion.h1>
+
+          {!persistent && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm leading-relaxed text-amber-200"
+            >
+              ⚠️ <span className="font-semibold">База данных не подключена.</span>{" "}
+              Аккаунты и посты хранятся во временной памяти и будут пропадать.
+              Владельцу сайта: в Vercel откройте проект → Storage → Create
+              Database → Upstash (Redis) → Connect Project, затем Redeploy.
+            </motion.div>
+          )}
 
           <Composer
             me={me}

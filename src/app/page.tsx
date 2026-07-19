@@ -30,13 +30,19 @@ export default function AuthPage() {
       setReady(true);
       return;
     }
-    me().then((user) => {
-      if (user) {
-        router.replace(user.onboarded ? "/feed" : "/onboarding");
-      } else {
-        setReady(true);
-      }
-    });
+    me()
+      .then((user) => {
+        if (user) {
+          router.replace(user.onboarded ? "/feed" : "/onboarding");
+        } else {
+          setReady(true); // сессия действительно истекла (401)
+        }
+      })
+      .catch(() => {
+        // сервер недоступен или холодный старт — НЕ разлогиниваем,
+        // лента сама дозагрузится и повторит запрос
+        router.replace("/feed");
+      });
   }, [router]);
 
   async function submit(e: React.FormEvent) {

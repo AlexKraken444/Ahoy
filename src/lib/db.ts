@@ -26,9 +26,7 @@ export const hasPersistentStore = redis !== null;
    between invocations — connect Upstash Redis for real persistence. */
 type Mem = {
   users: Map<string, DbUser>;
-  userIndex: string[];
   posts: Map<string, Post>;
-  postIndex: string[]; // newest first
   sessions: Map<string, string>;
   seeded: boolean;
 };
@@ -36,17 +34,22 @@ type Mem = {
 const g = globalThis as unknown as { __ahoyMem?: Mem };
 const mem: Mem = (g.__ahoyMem ??= {
   users: new Map(),
-  userIndex: [],
   posts: new Map(),
-  postIndex: [],
   sessions: new Map(),
   seeded: false,
 });
 
-const USER_INDEX = "ahoy:users:index";
-const POST_INDEX = "ahoy:posts:index";
+/* Atomic set/zset indexes. The old JSON-array indexes (v1) are migrated
+   lazily so existing deployments keep their data. */
+const USER_SET = "ahoy:users:set";
+const USER_INDEX_V1 = "ahoy:users:index";
+const POSTS_Z = "ahoy:posts:z";
+const POST_INDEX_V1 = "ahoy:posts:index";
 const SESSIONS = "ahoy:sessions";
 const SEEDED = "ahoy:seeded";
+
+const userKey = (id: string) => `ahoy:user:${id}`;
+const postKey = (id: string) => `ahoy:post:${id}`;
 
 export const uid = () => randomUUID();
 
@@ -66,87 +69,108 @@ export function publicUser(u: DbUser): User {
   };
 }
 
+function normalizePost(p: Post): Post {
+  return { ...p, likes: p.likes ?? [], comments: p.comments ?? [] };
+}
+
 /* ------------------------------ users ------------------------------ */
+
+async function userIdsRedis(r: Redis): Promise<string[]> {
+  const ids = await r.smembers(USER_SET);
+  if (ids.length > 0) return ids as string[];
+  // migrate v1 JSON-array index
+  const old = (await r.get<string[]>(USER_INDEX_V1)) ?? [];
+  if (old.length > 0) {
+    await r.sadd(USER_SET, old[0], ...old.slice(1));
+    return old;
+  }
+  return [];
+}
 
 export async function getAllUsers(): Promise<DbUser[]> {
   await ensureSeed();
   if (redis) {
-    const ids = (await redis.get<string[]>(USER_INDEX)) ?? [];
+    const ids = await userIdsRedis(redis);
     if (ids.length === 0) return [];
-    const rows = (await redis.mget(...ids.map((id) => `ahoy:user:${id}`))) as
-      (DbUser | null)[];
+    const rows = (await redis.mget(...ids.map(userKey))) as (DbUser | null)[];
     return rows.filter((u): u is DbUser => u !== null);
   }
-  return mem.userIndex
-    .map((id) => mem.users.get(id))
-    .filter((u): u is DbUser => !!u);
+  return [...mem.users.values()];
+}
+
+/** Direct key lookup — auth never depends on index integrity. */
+export async function getUserById(id: string): Promise<DbUser | null> {
+  await ensureSeed();
+  if (redis) return await redis.get<DbUser>(userKey(id));
+  return mem.users.get(id) ?? null;
 }
 
 export async function saveUser(user: DbUser): Promise<void> {
   if (redis) {
-    const ids = (await redis.get<string[]>(USER_INDEX)) ?? [];
-    if (!ids.includes(user.id)) {
-      await redis.set(USER_INDEX, [...ids, user.id]);
-    }
-    await redis.set(`ahoy:user:${user.id}`, user);
+    await Promise.all([
+      redis.sadd(USER_SET, user.id),
+      redis.set(userKey(user.id), user),
+    ]);
     return;
   }
-  if (!mem.userIndex.includes(user.id)) mem.userIndex.push(user.id);
   mem.users.set(user.id, user);
 }
 
 /* ------------------------------ posts ------------------------------ */
 
+async function postIdsRedis(r: Redis): Promise<string[]> {
+  // newest first
+  const ids = await r.zrange(POSTS_Z, 0, -1, { rev: true });
+  if (ids.length > 0) return ids as string[];
+  // migrate v1 JSON-array index (needs createdAt scores from the posts)
+  const old = (await r.get<string[]>(POST_INDEX_V1)) ?? [];
+  if (old.length === 0) return [];
+  const rows = (await r.mget(...old.map(postKey))) as (Post | null)[];
+  const found = rows.filter((p): p is Post => p !== null);
+  if (found.length > 0) {
+    const members = found.map((p) => ({ score: p.createdAt, member: p.id }));
+    await r.zadd(POSTS_Z, members[0], ...members.slice(1));
+  }
+  return found
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .map((p) => p.id);
+}
+
 export async function getAllPosts(): Promise<Post[]> {
   await ensureSeed();
   if (redis) {
-    const ids = (await redis.get<string[]>(POST_INDEX)) ?? [];
+    const ids = await postIdsRedis(redis);
     if (ids.length === 0) return [];
-    const rows = (await redis.mget(...ids.map((id) => `ahoy:post:${id}`))) as
-      (Post | null)[];
-    return rows
-      .filter((p): p is Post => p !== null)
-      .map((p) => ({ ...p, likes: p.likes ?? [], comments: p.comments ?? [] }));
+    const rows = (await redis.mget(...ids.map(postKey))) as (Post | null)[];
+    return rows.filter((p): p is Post => p !== null).map(normalizePost);
   }
-  return mem.postIndex
-    .map((id) => mem.posts.get(id))
-    .filter((p): p is Post => !!p);
+  return [...mem.posts.values()];
 }
 
 export async function getPost(id: string): Promise<Post | null> {
   if (redis) {
-    const p = await redis.get<Post>(`ahoy:post:${id}`);
-    return p ? { ...p, likes: p.likes ?? [], comments: p.comments ?? [] } : null;
+    const p = await redis.get<Post>(postKey(id));
+    return p ? normalizePost(p) : null;
   }
   return mem.posts.get(id) ?? null;
 }
 
-export async function savePost(
-  post: Post,
-  { prepend = false }: { prepend?: boolean } = {}
-): Promise<void> {
+export async function savePost(post: Post): Promise<void> {
   if (redis) {
-    if (prepend) {
-      const ids = (await redis.get<string[]>(POST_INDEX)) ?? [];
-      await redis.set(POST_INDEX, [post.id, ...ids.filter((i) => i !== post.id)]);
-    }
-    await redis.set(`ahoy:post:${post.id}`, post);
+    await Promise.all([
+      redis.zadd(POSTS_Z, { score: post.createdAt, member: post.id }),
+      redis.set(postKey(post.id), post),
+    ]);
     return;
-  }
-  if (prepend) {
-    mem.postIndex = [post.id, ...mem.postIndex.filter((i) => i !== post.id)];
   }
   mem.posts.set(post.id, post);
 }
 
 export async function deletePostDb(id: string): Promise<void> {
   if (redis) {
-    const ids = (await redis.get<string[]>(POST_INDEX)) ?? [];
-    await redis.set(POST_INDEX, ids.filter((i) => i !== id));
-    await redis.del(`ahoy:post:${id}`);
+    await Promise.all([redis.zrem(POSTS_Z, id), redis.del(postKey(id))]);
     return;
   }
-  mem.postIndex = mem.postIndex.filter((i) => i !== id);
   mem.posts.delete(id);
 }
 
@@ -172,8 +196,7 @@ export async function userFromRequest(req: Request): Promise<DbUser | null> {
   if (redis) userId = await redis.hget<string>(SESSIONS, token);
   else userId = mem.sessions.get(token) ?? null;
   if (!userId) return null;
-  const users = await getAllUsers();
-  return users.find((u) => u.id === userId) ?? null;
+  return getUserById(userId);
 }
 
 /* ------------------------------ handles ------------------------------ */
@@ -200,9 +223,9 @@ const CAPTAIN_ID = "captain-ahoy";
 
 async function ensureSeed(): Promise<void> {
   if (redis) {
-    const done = await redis.get(SEEDED);
-    if (done) return;
-    await redis.set(SEEDED, 1);
+    // SET NX — только один инстанс выполнит сидинг
+    const first = await redis.set(SEEDED, 1, { nx: true });
+    if (first === null) return;
   } else {
     if (mem.seeded) return;
     mem.seeded = true;
@@ -220,28 +243,22 @@ async function ensureSeed(): Promise<void> {
     onboarded: true,
   });
 
-  await savePost(
-    {
-      id: uid(),
-      userId: CAPTAIN_ID,
-      text: "Добро пожаловать на борт Ahoy! ⚓\n\nЗдесь делятся мыслями, находками и ловят попутный ветер. Напишите свой первый пост — море ждёт!",
-      image: null,
-      likes: [],
-      comments: [],
-      createdAt: Date.now() - 1000 * 60 * 60 * 26,
-    },
-    { prepend: true }
-  );
-  await savePost(
-    {
-      id: uid(),
-      userId: CAPTAIN_ID,
-      text: "Совет дня: лучший способ начать утро — крепкий кофе и чистая лента. Публикуйте, ставьте якоря на понравившееся и держите курс. 🌊",
-      image: null,
-      likes: [],
-      comments: [],
-      createdAt: Date.now() - 1000 * 60 * 60 * 5,
-    },
-    { prepend: true }
-  );
+  await savePost({
+    id: uid(),
+    userId: CAPTAIN_ID,
+    text: "Добро пожаловать на борт Ahoy! ⚓\n\nЗдесь делятся мыслями, находками и ловят попутный ветер. Напишите свой первый пост — море ждёт!",
+    image: null,
+    likes: [],
+    comments: [],
+    createdAt: Date.now() - 1000 * 60 * 60 * 26,
+  });
+  await savePost({
+    id: uid(),
+    userId: CAPTAIN_ID,
+    text: "Совет дня: лучший способ начать утро — крепкий кофе и чистая лента. Публикуйте, ставьте якоря на понравившееся и держите курс. 🌊",
+    image: null,
+    likes: [],
+    comments: [],
+    createdAt: Date.now() - 1000 * 60 * 60 * 5,
+  });
 }

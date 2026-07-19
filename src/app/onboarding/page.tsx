@@ -23,18 +23,22 @@ export default function OnboardingPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    me().then((u) => {
-      if (!u) {
-        router.replace("/");
-        return;
-      }
-      if (u.onboarded) {
-        router.replace("/feed");
-        return;
-      }
-      setUser(u);
-      setHandle(u.handle);
-    });
+    me()
+      .then((u) => {
+        if (!u) {
+          router.replace("/");
+          return;
+        }
+        if (u.onboarded) {
+          router.replace("/feed");
+          return;
+        }
+        setUser(u);
+        setHandle(u.handle);
+      })
+      .catch(() => {
+        /* сеть моргнула — остаёмся, пользователь может обновить страницу */
+      });
   }, [router]);
 
   async function pickAvatar(e: React.ChangeEvent<HTMLInputElement>) {

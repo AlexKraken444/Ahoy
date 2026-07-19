@@ -34,6 +34,6 @@ export async function POST(req: Request) {
     comments: [],
     createdAt: Date.now(),
   };
-  await savePost(post, { prepend: true });
+  await savePost(post);
   return NextResponse.json({ post });
 }
